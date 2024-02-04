@@ -1,0 +1,25 @@
+version: '2.0'
+services:
+  # gitlab-ci-trigger:
+    # build:
+      # context: .
+      # dockerfile: Dockerfile.go
+    # image:  gitlab-ci-trigger:latest
+    # environment:
+      # CI_TRIGGER_TOKEN: ${CI_TRIGGER_TOKEN}
+    # container_name: gitlab-ci-trigger
+    # restart: always
+    # ports:
+      # - "2045:2045"
+  
+  gitlab-ci-trigger-py:
+    build:
+      context: .
+      dockerfile: Dockerfile.py
+    image:  gitlab-ci-trigger-py:latest
+    environment:
+      CI_TRIGGER_TOKEN: ${CI_TRIGGER_TOKEN}
+    container_name: gitlab-ci-trigger-py
+    restart: always
+    ports:
+      - "2045:2045"

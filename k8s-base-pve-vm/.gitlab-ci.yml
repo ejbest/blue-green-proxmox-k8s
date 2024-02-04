@@ -1,0 +1,100 @@
+variables:
+  TF_ROOT: ./k8s-base-pve-vm
+  BACKEND: backends/${TF_ENV}.conf
+  TF_VAR_vault_addr: ${VAULT_ADDR}
+  TF_VAR_vault_token: ${ROOT_VAULT_TOKEN}
+  WORKSPACE: ${TF_ENV}
+
+.before_script_template:
+  before_script:
+    # Change into the terraform project directory
+    - cd $TF_ROOT
+    # install ssh-agent
+    # - 'which ssh-agent || ( apt-get update -y && apt-get install openssh-client -y )'
+    # run ssh-agent
+    # - eval $(ssh-agent -s)
+    # - ssh-add <(echo "$SSH_PRIVATE_KEY")
+    # - mkdir -p ~/.ssh
+    # - echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config  
+    # Run terraform init
+    # - terraform init -upgrade -backend-config=$BACKEND
+    - terraform init -upgrade -migrate-state -backend-config="endpoint=${S3_MINIO_ENDPOINT}" -backend-config="bucket=${S3_MINIO_BUCKET}" -backend-config="access_key=${S3_MINIO_ACCESS_KEY}" -backend-config="secret_key=${S3_MINIO_SECRET_KEY}" -backend-config="region=${S3_MINIO_REGION}" -backend-config=$BACKEND
+    # - terraform workspace list
+    # Create | Switch to terraform workspace
+    - terraform workspace select $WORKSPACE || terraform workspace new $WORKSPACE
+    
+.deploy:
+  only:
+    refs:
+      - main
+    variables:
+      - $JOB == "deploy"
+
+  # Runner to be used
+  tags:
+    - proxmox-k8s
+
+.destroy:
+  # Runner to be used
+  tags:
+    - proxmox-k8s
+  only:
+    refs:
+      - main
+    variables:
+      - $JOB == "destroy"
+
+stages:
+  - validate
+  - plan
+  - apply
+  - destroy
+
+image:
+  name: ${BASE_IMAGE}
+
+validate:
+  stage: validate
+  script:
+      - terraform validate
+  extends:
+    - .before_script_template
+    - .deploy
+
+plan:
+  stage: plan
+  script:
+    - terraform plan -out "planfile" -lock=false
+  extends:
+    - .before_script_template
+    - .deploy
+    # - .variables
+  dependencies:
+    - validate
+  artifacts:
+    paths:
+      - $TF_ROOT/planfile
+    expire_in: '180'
+
+apply:
+  stage: apply
+  script:
+    - terraform apply  -input=false "planfile" 
+  extends:
+    - .before_script_template
+    - .deploy
+  dependencies:
+    - plan
+  # Change this to manual if You want to check the plan
+  # when: manual 
+  allow_failure: true
+
+destroy:
+  stage: destroy
+  script:
+    - terraform destroy -auto-approve
+  extends:
+    - .before_script_template
+    - .destroy
+  dependencies:
+    - apply

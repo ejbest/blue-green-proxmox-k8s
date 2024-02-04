@@ -1,0 +1,26 @@
+---
+- name: Copy Latest Backup from Server A to Server B
+  hosts: localhost
+  gather_facts: false
+
+  tasks:
+    - name: Find the latest folder on Server A
+      shell: "ssh user@server_a_ip 'ls -t /storage/backups | grep ^backup_192.168.0.125_jenkins | head -n 1'"
+      register: latest_folder_result
+
+    - name: Check if the latest folder is found
+      fail:
+        msg: "No folders with prefix 'backup_192.168.0.125_jenkins' found on Server A."
+      when: latest_folder_result.stdout_lines | length == 0
+
+    - name: Copy the latest folder to Server B
+      command: "scp -r user@server_a_ip:/storage/backups/{{ latest_folder_result.stdout }} user@server_b_ip:/path/to/destination/folder"
+      delegate_to: localhost
+
+    - name: Check if the destination folder exists on Server B
+      shell: "ssh user@server_b_ip 'ls -d /path/to/destination/folder/pvc_jenkins*' 2>/dev/null || true"
+      register: destination_folder_result
+
+    - name: Create the destination folder on Server B if it doesn't exist
+      command: "ssh user@server_b_ip 'mkdir -p /path/to/destination/folder/{{ latest_folder_result.stdout }}'"
+      when: destination_folder_result.rc != 0
